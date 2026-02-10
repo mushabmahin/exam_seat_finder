@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin – Add Roll Range</title>
+</head>
+<body>
+
+<h2>Admin – Add Roll Range</h2>
+
+<input id="prefix" placeholder="Prefix (23AD)">
+<input id="start" type="number" placeholder="Start">
+<input id="end" type="number" placeholder="End">
+<input id="branch" placeholder="Branch">
+<input id="year" type="number" placeholder="Year">
+<input id="room" placeholder="Room">
+<input id="location" placeholder="Location">
+<button onclick="addRange()">Add Seats</button>
+
+<p id="msg"></p>
+
+<script>
+
+    const loc = document.getElementById("location");
+    const prefix = document.getElementById("prefix");   
+    const start = document.getElementById("start");
+    const end = document.getElementById("end");
+    const branch = document.getElementById("branch");
+    const year = document.getElementById("year");
+    const room = document.getElementById("room");
+    const msg = document.getElementById("msg");
+
+async function addRange() {
+  const data = {
+    prefix: prefix.value,
+    start: Number(start.value),
+    end: Number(end.value),
+    branch: branch.value,
+    year: Number(year.value),
+    room: room.value,
+    location: loc.value
+  };
+  console.log("Sending data:", data);
+
+  const res = await fetch("/api/seats/add-range", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+
+  const result = await res.json();
+  msg.innerText = result.message;
+}
+</script>
+
+</body>
+</html>

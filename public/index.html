@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Exam Seating</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f4f7fb;
+      background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+  <!-- Card -->
+  <div class="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
+
+    <!-- Header -->
+    <div class="bg-blue-600 text-white text-center px-6 py-8 relative">
+      <h1 class="text-2xl font-bold">Exam Seating</h1>
+      <p class="text-blue-100 text-sm mt-1">Find your classroom instantly</p>
+
+      <!-- Decorative circles -->
+      <div class="absolute inset-0 opacity-10">
+        <svg width="100%" height="100%">
+          <circle cx="0" cy="0" r="120" fill="white"/>
+          <circle cx="100%" cy="100%" r="100" fill="white"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="p-8">
+
+      <!-- Status -->
+      <p class="text-center text-xs text-slate-400 mb-4">
+        Connected to Live Database
+      </p>
+
+      <!-- Branch -->
+      <div class="mb-5">
+        <label class="block text-sm font-semibold text-slate-700 mb-2">Select Branch</label>
+        <select id="branch"
+          class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500">
+          <option value="">Choose Branch</option>
+          <option value="AIDS">AI & DS</option>
+          <option value="CSE-A">CSE-A</option>
+          <option value="CSE-B">CSE-B</option>
+          <option value="CS-AI">CS-AI</option>
+          <option value="ECE">ECE</option>
+          <option value="EEE">EEE</option>
+          <option value="ME">Mechanical</option>
+          <option value="CE">Civil</option>
+        </select>
+      </div>
+
+      <!-- Year -->
+      <div class="mb-5">
+        <label class="block text-sm font-semibold text-slate-700 mb-2">Select Year</label>
+        <select id="year"
+          class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500">
+          <option value="">Choose Year</option>
+          <option value="1">1st Year</option>
+          <option value="2">2nd Year</option>
+          <option value="3">3rd Year</option>
+          <option value="4">4th Year</option>
+        </select>
+      </div>
+
+      <!-- Roll -->
+      <div class="mb-6">
+        <label class="block text-sm font-semibold text-slate-700 mb-2">Roll Number</label>
+        <input id="roll"
+          placeholder="E.G. 23 OR 23AD023"
+          class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 uppercase" />
+        <p class="text-xs text-slate-400 mt-2">
+          Tip: You can enter just the last digits (e.g., 56)
+        </p>
+      </div>
+
+      <!-- Button -->
+      <button onclick="searchSeat()"
+        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg transition">
+        Find My Seat
+      </button>
+
+      <!-- Result -->
+      <div id="resultBox" class="hidden mt-6 text-center">
+        <div id="successBox" class="hidden">
+          <p class="text-sm text-slate-500 uppercase tracking-wide">Allocated Classroom</p>
+          <p id="roomText" class="text-4xl font-bold text-blue-700 mt-2">--</p>
+          <p id="locationText" class="text-blue-600 font-medium mt-1">--</p>
+        </div>
+
+        <div id="errorBox" class="hidden">
+          <p class="text-red-600 font-semibold">Seat not found</p>
+          <p class="text-sm text-slate-500 mt-1">Please check your details</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <p class="text-xs text-slate-500 mt-6">&copy; 2026 College Exam Cell</p>
+
+  <!-- Script -->
+  <script>
+    async function searchSeat() {
+      const branch = document.getElementById("branch").value;
+      const year = document.getElementById("year").value;
+      let roll = document.getElementById("roll").value.trim().toUpperCase();
+
+      if (!branch || !year || !roll) {
+        alert("Please fill all fields");
+        return;
+      }
+
+      const res = await fetch(
+        `/api/seats/search?roll=${roll}&branch=${branch}&year=${year}`
+      );
+
+      const data = await res.json();
+
+      document.getElementById("resultBox").classList.remove("hidden");
+
+      if (res.status === 404) {
+        document.getElementById("successBox").classList.add("hidden");
+        document.getElementById("errorBox").classList.remove("hidden");
+      } else {
+        document.getElementById("errorBox").classList.add("hidden");
+        document.getElementById("successBox").classList.remove("hidden");
+        document.getElementById("roomText").innerText = data.room;
+        document.getElementById("locationText").innerText = data.location;
+      }
+    }
+  </script>
+
+</body>
+</html>
