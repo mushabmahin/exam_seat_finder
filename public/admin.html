@@ -83,7 +83,8 @@
 
         <div class="mt-6 flex gap-3">
           <button id="addBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition">Add Seats</button>
-          <button id="clearBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3 px-6 rounded-lg transition">Clear</button>
+          <button id="clearBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3 px-6 rounded-lg transition">Clear Form</button>
+          <button id="clearDbBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition">Clear Database</button>
         </div>
 
         <div id="msg" class="mt-6"></div>
@@ -136,6 +137,10 @@
           } else {
             statusBox.innerHTML += '<p class="text-xs text-slate-500 mt-1">Admin API key not configured on server.</p>';
           }
+
+          // Enable/disable clear DB button depending on DB connection
+          const btn = document.getElementById('clearDbBtn');
+          if (btn) btn.disabled = !s.dbConnected;
         } catch (err) {
           console.error('Status fetch failed', err);
           statusBox.innerHTML = '<p class="text-sm text-red-600">Unable to reach status endpoint</p>';
@@ -143,6 +148,10 @@
       }
 
       fetchStatus();
+
+  // Enable/disable Clear DB button based on DB connection
+  const clearDbBtn = document.getElementById('clearDbBtn');
+  if (clearDbBtn) clearDbBtn.disabled = true;
 
         addBtn.addEventListener('click', async () => {
         msg.innerHTML = '';
@@ -162,30 +171,81 @@
           msg.innerHTML = '<p class="text-sm text-red-600">Please fill all fields.</p>';
           return;
         }
+
+        // Disable button while previewing
         addBtn.disabled = true;
         addBtn.classList.add('opacity-60');
 
         try {
-          const res = await fetch('/api/seats/add-range', {
+          // First ask for a preview to detect duplicates without modifying DB
+          const previewRes = await fetch('/api/seats/add-range', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload)
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(Object.assign({}, payload, { preview: true }))
           });
 
+          const preview = await previewRes.json();
+
+          if (!previewRes.ok) {
+            const errorMsg = preview.message || preview.error || 'Preview failed';
+            msg.innerHTML = `<p class="text-sm text-red-600">${errorMsg}</p>`;
+            return;
+          }
+
+          // If there are duplicates, show a confirmation modal
+          if (preview.duplicateCount && preview.duplicateCount > 0) {
+            showConfirmModal(preview, async (confirmed) => {
+              if (!confirmed) {
+                msg.innerHTML = '<p class="text-sm text-slate-600">Operation cancelled.</p>';
+                addBtn.disabled = false;
+                addBtn.classList.remove('opacity-60');
+                return;
+              }
+              // proceed with actual upload
+              await performUpload(payload);
+            });
+          } else {
+            // no duplicates — proceed directly
+            await performUpload(payload);
+          }
+
+        } catch (err) {
+          console.error(err);
+          msg.innerHTML = '<p class="text-sm text-red-600">Network or server error</p>';
+        } finally {
+          // keep disabled state handled by performUpload or re-enable
+        }
+      });
+
+      // Perform the actual upload (no preview)
+      async function performUpload(payload) {
+        try {
+          const res = await fetch('/api/seats/add-range', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
           const result = await res.json();
 
           if (!res.ok) {
-            msg.innerHTML = `<p class="text-sm text-red-600">${result.message || 'Error'}</p>`;
+            const errorMsg = result.message || result.error || 'Error';
+            msg.innerHTML = `<p class="text-sm text-red-600">${errorMsg}</p>`;
           } else {
             const htmlParts = [];
             htmlParts.push(`<p class="text-sm text-slate-600">Generated: <strong>${result.generated}</strong></p>`);
-            htmlParts.push(`<p class="text-sm text-slate-600">Inserted: <strong>${result.inserted}</strong></p>`);
-            htmlParts.push(`<p class="text-sm text-slate-600">Skipped: <strong>${result.skipped}</strong></p>`);
-            if (result.skippedRolls && result.skippedRolls.length) {
-              htmlParts.push('<details class="mt-2"><summary class="text-xs text-slate-500 cursor-pointer">View skipped rolls</summary>');
-              htmlParts.push(`<div class="text-xs text-slate-700 mt-2 whitespace-pre-wrap">${result.skippedRolls.join(', ')}</div>`);
+            htmlParts.push(`<p class="text-sm text-slate-600">Inserted (new): <strong>${result.inserted}</strong></p>`);
+            htmlParts.push(`<p class="text-sm text-slate-600">Replaced (existing): <strong>${result.replacedAttempted}</strong></p>`);
+            htmlParts.push(`<p class="text-sm text-slate-600">Actually modified: <strong>${result.replacedModified}</strong></p>`);
+
+            if (result.insertedRolls && result.insertedRolls.length) {
+              htmlParts.push('<details class="mt-2"><summary class="text-xs text-slate-500 cursor-pointer">View inserted rolls</summary>');
+              htmlParts.push(`<div class="text-xs text-slate-700 mt-2 whitespace-pre-wrap">${result.insertedRolls.join(', ')}</div>`);
+              htmlParts.push('</details>');
+            }
+
+            if (result.replacedRolls && result.replacedRolls.length) {
+              htmlParts.push('<details class="mt-2"><summary class="text-xs text-slate-500 cursor-pointer">View replaced rolls</summary>');
+              htmlParts.push(`<div class="text-xs text-slate-700 mt-2 whitespace-pre-wrap">${result.replacedRolls.join(', ')}</div>`);
               htmlParts.push('</details>');
             }
 
@@ -198,7 +258,94 @@
           addBtn.disabled = false;
           addBtn.classList.remove('opacity-60');
         }
-      });
+      }
+
+      // Show a simple confirm modal listing duplicates and asking to continue
+      function showConfirmModal(preview, callback) {
+        // overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50';
+
+        const box = document.createElement('div');
+        box.className = 'bg-white rounded-lg p-6 w-11/12 max-w-2xl shadow-lg';
+
+        const title = document.createElement('h3');
+        title.className = 'text-lg font-bold mb-2';
+        title.innerText = `Found ${preview.duplicateCount} existing roll(s)`;
+        box.appendChild(title);
+
+        const note = document.createElement('p');
+        note.className = 'text-sm text-slate-600 mb-4';
+        note.innerText = 'Continuing will replace existing entries with the new data. Choose Continue to proceed or Cancel to abort.';
+        box.appendChild(note);
+
+        if (preview.duplicateRolls && preview.duplicateRolls.length) {
+          const details = document.createElement('details');
+          details.className = 'mb-4';
+          const summary = document.createElement('summary');
+          summary.className = 'text-sm text-slate-500 cursor-pointer';
+          summary.innerText = 'View duplicate rolls';
+          details.appendChild(summary);
+
+          const list = document.createElement('div');
+          list.className = 'text-xs text-slate-700 mt-2 whitespace-pre-wrap';
+          list.innerText = preview.duplicateRolls.join(', ');
+          details.appendChild(list);
+          box.appendChild(details);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'flex gap-3 justify-end';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200';
+        cancelBtn.innerText = 'Cancel';
+        cancelBtn.onclick = () => { document.body.removeChild(overlay); callback(false); };
+
+        const continueBtn = document.createElement('button');
+        continueBtn.className = 'px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700';
+        continueBtn.innerText = 'Continue';
+        continueBtn.onclick = () => { document.body.removeChild(overlay); callback(true); };
+
+        actions.appendChild(cancelBtn);
+        actions.appendChild(continueBtn);
+        box.appendChild(actions);
+
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+      }
+
+      // Clear DB handler - requires typed confirmation to avoid accidents
+      if (document.getElementById('clearDbBtn')) {
+        document.getElementById('clearDbBtn').addEventListener('click', async () => {
+          const confirmText = prompt('Type CLEAR (uppercase) to confirm deleting ALL seats from the database');
+          if (confirmText !== 'CLEAR') return;
+
+          // disable button while running
+          const btn = document.getElementById('clearDbBtn');
+          btn.disabled = true;
+          btn.classList.add('opacity-60');
+          msg.innerHTML = '';
+
+          try {
+            const res = await fetch('/api/seats/clear', { method: 'POST' });
+            const result = await res.json();
+            if (!res.ok) {
+              msg.innerHTML = `<p class="text-sm text-red-600">${result.message || result.error || 'Clear failed'}</p>`;
+            } else {
+              msg.innerHTML = `<p class="text-sm text-emerald-600">${result.message}. Deleted: <strong>${result.deleted}</strong></p>`;
+            }
+            // refresh status after operation
+            fetchStatus();
+          } catch (err) {
+            console.error('Clear DB failed', err);
+            msg.innerHTML = '<p class="text-sm text-red-600">Network or server error during clear</p>';
+          } finally {
+            btn.disabled = false;
+            btn.classList.remove('opacity-60');
+          }
+        });
+      }
     </script>
   </body>
 </html>

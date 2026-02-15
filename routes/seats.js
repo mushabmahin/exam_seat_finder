@@ -43,26 +43,48 @@ router.post("/add-range", async (req, res) => {
   }
 
   try {
-    // Find existing rolls to avoid duplicate key errors and give clear feedback
+    // Find existing rolls so we can report how many will be updated vs created
     const existing = await Seat.find({ roll: { $in: rolls } }).select("roll").lean();
     const existingSet = new Set(existing.map(r => r.roll));
+    // If caller asks for a preview, return duplicate info without modifying DB
+    const preview = req.body && req.body.preview === true;
+    const generated = records.length;
+    const existingCount = existingSet.size;
 
-    const toInsert = records.filter(r => !existingSet.has(r.roll));
-
-    let inserted = [];
-    if (toInsert.length > 0) {
-      inserted = await Seat.insertMany(toInsert);
+    if (preview) {
+      return res.json({
+        message: 'Preview',
+        generated,
+        duplicateCount: existingCount,
+        duplicateRolls: [...existingSet],
+        newCount: generated - existingCount,
+        newRolls: records.filter(r => !existingSet.has(r.roll)).map(r => r.roll)
+      });
     }
 
-    const skipped = records.length - inserted.length;
-    const skippedRolls = [...existingSet];
+    // Build bulk operations: update existing or insert new using upsert
+    const ops = records.map(rec => ({
+      updateOne: {
+        filter: { roll: rec.roll },
+        update: { $set: { branch: rec.branch, year: rec.year, room: rec.room, location: rec.location } },
+        upsert: true
+      }
+    }));
+
+    const bulkResult = ops.length > 0 ? await Seat.bulkWrite(ops, { ordered: false }) : null;
+
+    // Compute counts
+    const insertedCount = generated - existingCount; // how many should be new
+    const modifiedCount = (bulkResult && (bulkResult.modifiedCount || bulkResult.nModified || (bulkResult.result && bulkResult.result.nModified))) || 0;
 
     res.json({
-      message: `Range processed` ,
-      generated: records.length,
-      inserted: inserted.length,
-      skipped,
-      skippedRolls
+      message: `Range processed`,
+      generated,
+      inserted: insertedCount,
+      replacedAttempted: existingCount,
+      replacedModified: modifiedCount,
+      insertedRolls: records.filter(r => !existingSet.has(r.roll)).map(r => r.roll),
+      replacedRolls: [...existingSet]
     });
   } catch (err) {
     console.error("Error inserting range:", err);
@@ -114,8 +136,6 @@ router.get("/search", async (req, res) => {
   }
 });
 
-module.exports = router;
-
 // Status endpoint — quick health info (used by admin UI)
 router.get('/status', (req, res) => {
   const hasMongoUri = !!process.env.MONGO_URI;
@@ -129,3 +149,18 @@ router.get('/status', (req, res) => {
     dbConnected: readyState === 1
   });
 });
+
+// Admin utility: clear all seat documents
+router.post('/clear', async (req, res) => {
+  try {
+    const result = await Seat.deleteMany({});
+    // result may have deletedCount or n
+    const deleted = result.deletedCount || result.n || 0;
+    res.json({ message: 'Database cleared', deleted });
+  } catch (err) {
+    console.error('Error clearing DB:', err);
+    res.status(500).json({ message: 'Failed to clear database', error: err.message });
+  }
+});
+
+module.exports = router;
