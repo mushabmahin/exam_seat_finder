@@ -1,56 +1,204 @@
 <!DOCTYPE html>
-<html>
-<head>
-  <title>Admin – Add Roll Range</title>
-</head>
-<body>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin – Add Roll Range</title>
 
-<h2>Admin – Add Roll Range</h2>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<input id="prefix" placeholder="Prefix (23AD)">
-<input id="start" type="number" placeholder="Start">
-<input id="end" type="number" placeholder="End">
-<input id="branch" placeholder="Branch">
-<input id="year" type="number" placeholder="Year">
-<input id="room" placeholder="Room">
-<input id="location" placeholder="Location">
-<button onclick="addRange()">Add Seats</button>
+    <style>
+      body { font-family: 'Inter', sans-serif; background-color: #f4f7fb; }
+    </style>
+  </head>
 
-<p id="msg"></p>
+  <body class="min-h-screen flex items-center justify-center p-6">
+    <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden">
 
-<script>
+      <div class="bg-blue-600 text-white px-6 py-8">
+        <h1 class="text-2xl font-bold">Admin — Add Roll Range</h1>
+        <p class="text-blue-100 text-sm mt-1">Add roll ranges (no admin key required)</p>
+      </div>
 
-    const loc = document.getElementById("location");
-    const prefix = document.getElementById("prefix");   
-    const start = document.getElementById("start");
-    const end = document.getElementById("end");
-    const branch = document.getElementById("branch");
-    const year = document.getElementById("year");
-    const room = document.getElementById("room");
-    const msg = document.getElementById("msg");
+      <div class="p-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Prefix</label>
+            <input id="prefix" placeholder="E.g. MUT23AD" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 uppercase" />
+          </div>
 
-async function addRange() {
-  const data = {
-    prefix: prefix.value,
-    start: Number(start.value),
-    end: Number(end.value),
-    branch: branch.value,
-    year: Number(year.value),
-    room: room.value,
-    location: loc.value
-  };
-  console.log("Sending data:", data);
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Branch</label>
+            <select id="branch" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500">
+              <option value="">Choose Branch</option>
+              <option value="AIDS">AI &amp; DS</option>
+              <option value="CSE-A">CSE-A</option>
+              <option value="CSE-B">CSE-B</option>
+              <option value="CS-AI">CS-AI</option>
+              <option value="ECE">ECE</option>
+              <option value="EEE">EEE</option>
+              <option value="ME">Mechanical</option>
+              <option value="CE">Civil</option>
+            </select>
+          </div>
 
-  const res = await fetch("/api/seats/add-range", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  });
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Starting Roll No:</label>
+            <input id="start" type="number" placeholder="Start" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500" />
+          </div>
 
-  const result = await res.json();
-  msg.innerText = result.message;
-}
-</script>
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Ending Roll No:</label>
+            <input id="end" type="number" placeholder="End" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500" />
+          </div>
 
-</body>
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Year</label>
+            <select id="year" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500">
+              <option value="">Choose Year</option>
+              <option value="1">1st Year</option>
+              <option value="2">2nd Year</option>
+              <option value="3">3rd Year</option>
+              <option value="4">4th Year</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Room No:</label>
+            <input id="room" placeholder="E.G. 101" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500" />
+          </div>
+
+          <div class="md:col-span-2">
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Location</label>
+            <input id="location" placeholder="Block / Building" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500" />
+          </div>
+
+      <!-- Admin key not required in this deployment -->
+        </div>
+
+        <div id="status" class="mt-4"></div>
+
+        <div class="mt-6 flex gap-3">
+          <button id="addBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition">Add Seats</button>
+          <button id="clearBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3 px-6 rounded-lg transition">Clear</button>
+        </div>
+
+        <div id="msg" class="mt-6"></div>
+      </div>
+    </div>
+
+    <p class="text-xs text-slate-500 mt-6 text-center">&copy;  MITS Exam Cell</p>
+
+    <script>
+  const prefix = document.getElementById('prefix');
+  const start = document.getElementById('start');
+  const end = document.getElementById('end');
+  const branch = document.getElementById('branch');
+  const year = document.getElementById('year');
+  const room = document.getElementById('room');
+  const locationInput = document.getElementById('location');
+  const msg = document.getElementById('msg');
+  const statusBox = document.getElementById('status');
+  const addBtn = document.getElementById('addBtn');
+  const clearBtn = document.getElementById('clearBtn');
+
+      clearBtn.addEventListener('click', () => {
+  prefix.value = '';
+  start.value = '';
+  end.value = '';
+  branch.value = '';
+  year.value = '';
+  room.value = '';
+  locationInput.value = '';
+  msg.innerHTML = '';
+      });
+
+      // Fetch server status to show DB connection / config info
+      async function fetchStatus() {
+        try {
+          const res = await fetch('/api/seats/status');
+          const s = await res.json();
+
+          if (s.dbConnected) {
+            statusBox.innerHTML = '<p class="text-sm text-emerald-600">Connected to MongoDB</p>';
+          } else if (!s.mongoUriConfigured) {
+            statusBox.innerHTML = '<p class="text-sm text-red-600">MongoDB not configured (set MONGO_URI in .env)</p>';
+          } else {
+            statusBox.innerHTML = '<p class="text-sm text-orange-600">MongoDB not connected (check server logs)</p>';
+          }
+
+          // informative note about admin key presence (optional)
+          if (s.adminApiKeyConfigured) {
+            statusBox.innerHTML += '<p class="text-xs text-slate-500 mt-1">Admin API key is configured on server.</p>';
+          } else {
+            statusBox.innerHTML += '<p class="text-xs text-slate-500 mt-1">Admin API key not configured on server.</p>';
+          }
+        } catch (err) {
+          console.error('Status fetch failed', err);
+          statusBox.innerHTML = '<p class="text-sm text-red-600">Unable to reach status endpoint</p>';
+        }
+      }
+
+      fetchStatus();
+
+        addBtn.addEventListener('click', async () => {
+        msg.innerHTML = '';
+
+        const payload = {
+          prefix: prefix.value.trim(),
+          start: Number(start.value),
+          end: Number(end.value),
+          branch: branch.value.trim(),
+          year: Number(year.value),
+          room: room.value.trim(),
+          location: locationInput.value.trim()
+        };
+
+        // Basic client-side validation
+        if (!payload.prefix || !payload.branch || !payload.room || !payload.location || !payload.start || !payload.end || !payload.year) {
+          msg.innerHTML = '<p class="text-sm text-red-600">Please fill all fields.</p>';
+          return;
+        }
+        addBtn.disabled = true;
+        addBtn.classList.add('opacity-60');
+
+        try {
+          const res = await fetch('/api/seats/add-range', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+          });
+
+          const result = await res.json();
+
+          if (!res.ok) {
+            msg.innerHTML = `<p class="text-sm text-red-600">${result.message || 'Error'}</p>`;
+          } else {
+            const htmlParts = [];
+            htmlParts.push(`<p class="text-sm text-slate-600">Generated: <strong>${result.generated}</strong></p>`);
+            htmlParts.push(`<p class="text-sm text-slate-600">Inserted: <strong>${result.inserted}</strong></p>`);
+            htmlParts.push(`<p class="text-sm text-slate-600">Skipped: <strong>${result.skipped}</strong></p>`);
+            if (result.skippedRolls && result.skippedRolls.length) {
+              htmlParts.push('<details class="mt-2"><summary class="text-xs text-slate-500 cursor-pointer">View skipped rolls</summary>');
+              htmlParts.push(`<div class="text-xs text-slate-700 mt-2 whitespace-pre-wrap">${result.skippedRolls.join(', ')}</div>`);
+              htmlParts.push('</details>');
+            }
+
+            msg.innerHTML = `<div class="p-4 bg-slate-50 border border-slate-100 rounded-lg">${htmlParts.join('')}</div>`;
+          }
+        } catch (err) {
+          console.error(err);
+          msg.innerHTML = '<p class="text-sm text-red-600">Network or server error</p>';
+        } finally {
+          addBtn.disabled = false;
+          addBtn.classList.remove('opacity-60');
+        }
+      });
+    </script>
+  </body>
 </html>
