@@ -10,6 +10,9 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+// log current working directory and ensure static path
+console.log('cwd:', process.cwd());
+console.log('serving static from', require('path').resolve(process.cwd(), 'public'));
 app.use(express.static("public"));
 
 app.listen(5000, () => {

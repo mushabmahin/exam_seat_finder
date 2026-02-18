@@ -26,11 +26,6 @@
       <div class="p-8">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm font-semibold text-slate-700 mb-2">Prefix</label>
-            <input id="prefix" placeholder="E.g. MUT23AD" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 uppercase" />
-          </div>
-
-          <div>
             <label class="block text-sm font-semibold text-slate-700 mb-2">Branch</label>
             <select id="branch" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500">
               <option value="">Choose Branch</option>
@@ -94,7 +89,6 @@
     <p class="text-xs text-slate-500 mt-6 text-center">&copy;  MITS Exam Cell</p>
 
     <script>
-  const prefix = document.getElementById('prefix');
   const start = document.getElementById('start');
   const end = document.getElementById('end');
   const branch = document.getElementById('branch');
@@ -107,7 +101,6 @@
   const clearBtn = document.getElementById('clearBtn');
 
       clearBtn.addEventListener('click', () => {
-  prefix.value = '';
   start.value = '';
   end.value = '';
   branch.value = '';
@@ -157,7 +150,6 @@
         msg.innerHTML = '';
 
         const payload = {
-          prefix: prefix.value.trim(),
           start: Number(start.value),
           end: Number(end.value),
           branch: branch.value.trim(),
@@ -167,7 +159,7 @@
         };
 
         // Basic client-side validation
-        if (!payload.prefix || !payload.branch || !payload.room || !payload.location || !payload.start || !payload.end || !payload.year) {
+        if (!payload.branch || !payload.room || !payload.location || !payload.start || !payload.end || !payload.year) {
           msg.innerHTML = '<p class="text-sm text-red-600">Please fill all fields.</p>';
           return;
         }

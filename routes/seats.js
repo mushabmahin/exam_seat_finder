@@ -5,10 +5,10 @@ const router = express.Router();
 
 /* ADMIN – Add roll range */
 router.post("/add-range", async (req, res) => {
-  let { prefix, start, end, branch, year, room, location } = req.body;
+  let { start, end, branch, year, room, location } = req.body;
 
   // Basic validation
-  if (!prefix || start == null || end == null || !branch || year == null || !room || !location) {
+  if (start == null || end == null || !branch || year == null || !room || !location) {
     return res.status(400).json({ message: "Missing required fields" });
   }
 
@@ -24,14 +24,13 @@ router.post("/add-range", async (req, res) => {
     return res.status(400).json({ message: "Invalid roll range" });
   }
 
-  prefix = String(prefix).toUpperCase();
   branch = String(branch).toUpperCase();
 
   const records = [];
   const rolls = [];
 
   for (let i = start; i <= end; i++) {
-    const roll = prefix + i.toString().padStart(3, "0");
+    const roll = i.toString();
     rolls.push(roll);
     records.push({
       roll,
@@ -43,48 +42,96 @@ router.post("/add-range", async (req, res) => {
   }
 
   try {
-    // Find existing rolls so we can report how many will be updated vs created
-    const existing = await Seat.find({ roll: { $in: rolls } }).select("roll").lean();
-    const existingSet = new Set(existing.map(r => r.roll));
-    // If caller asks for a preview, return duplicate info without modifying DB
-    const preview = req.body && req.body.preview === true;
-    const generated = records.length;
-    const existingCount = existingSet.size;
+    // Find existing seats so we can determine which ones are identical vs changed
+    const existing = await Seat.find({ roll: { $in: rolls } }).lean();
+    const existingMap = Object.fromEntries(existing.map(s => [s.roll, s]));
 
-    if (preview) {
+    // prepare counts for preview
+    const duplicateRolls = [];
+    const changedRolls = [];
+    const newRolls = [];
+
+    records.forEach(rec => {
+      const ex = existingMap[rec.roll];
+      if (ex) {
+        if (
+          ex.branch === rec.branch &&
+          ex.year === rec.year &&
+          ex.room === rec.room &&
+          ex.location === rec.location
+        ) {
+          duplicateRolls.push(rec.roll);
+        } else {
+          changedRolls.push(rec.roll);
+        }
+      } else {
+        newRolls.push(rec.roll);
+      }
+    });
+
+    const previewFlag = req.body && req.body.preview === true;
+    const generated = records.length;
+
+    if (previewFlag) {
       return res.json({
         message: 'Preview',
         generated,
-        duplicateCount: existingCount,
-        duplicateRolls: [...existingSet],
-        newCount: generated - existingCount,
-        newRolls: records.filter(r => !existingSet.has(r.roll)).map(r => r.roll)
+        duplicateCount: duplicateRolls.length,
+        duplicateRolls,
+        changedCount: changedRolls.length,
+        changedRolls,
+        newCount: newRolls.length,
+        newRolls
       });
     }
 
-    // Build bulk operations: update existing or insert new using upsert
-    const ops = records.map(rec => ({
-      updateOne: {
-        filter: { roll: rec.roll },
-        update: { $set: { branch: rec.branch, year: rec.year, room: rec.room, location: rec.location } },
-        upsert: true
+    // Build bulk operations: only include new records or those where something changed
+    const ops = [];
+    records.forEach(rec => {
+      const ex = existingMap[rec.roll];
+      if (!ex) {
+        // brand‑new entry
+        ops.push({
+          updateOne: {
+            filter: { roll: rec.roll },
+            update: { $set: { branch: rec.branch, year: rec.year, room: rec.room, location: rec.location } },
+            upsert: true
+          }
+        });
+      } else {
+        // existing; if any field differs then update, otherwise skip
+        if (
+          ex.branch !== rec.branch ||
+          ex.year !== rec.year ||
+          ex.room !== rec.room ||
+          ex.location !== rec.location
+        ) {
+          ops.push({
+            updateOne: {
+              filter: { roll: rec.roll },
+              update: { $set: { branch: rec.branch, year: rec.year, room: rec.room, location: rec.location } },
+              upsert: true
+            }
+          });
+        }
       }
-    }));
+    });
 
     const bulkResult = ops.length > 0 ? await Seat.bulkWrite(ops, { ordered: false }) : null;
 
-    // Compute counts
-    const insertedCount = generated - existingCount; // how many should be new
+    // Compute counts based on earlier categorization
+    const insertedCount = newRolls.length;
+    const replacedAttempted = changedRolls.length;
     const modifiedCount = (bulkResult && (bulkResult.modifiedCount || bulkResult.nModified || (bulkResult.result && bulkResult.result.nModified))) || 0;
 
     res.json({
       message: `Range processed`,
       generated,
       inserted: insertedCount,
-      replacedAttempted: existingCount,
+      replacedAttempted,
       replacedModified: modifiedCount,
-      insertedRolls: records.filter(r => !existingSet.has(r.roll)).map(r => r.roll),
-      replacedRolls: [...existingSet]
+      insertedRolls: newRolls,
+      replacedRolls: changedRolls
     });
   } catch (err) {
     console.error("Error inserting range:", err);
