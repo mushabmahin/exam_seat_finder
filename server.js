@@ -21,7 +21,27 @@ app.listen(5000, () => {
 
 mongoose
   .connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 5000 })
-  .then(() => console.log("MongoDB connected"))
+  .then(async () => {
+    console.log("MongoDB connected");
+
+    // remove legacy unique index on roll if it still exists
+    try {
+      const coll = mongoose.connection.collection('seats');
+      const indexes = await coll.indexes();
+      const hasRoll = indexes.some(ix => ix.name === 'roll_1');
+      if (hasRoll) {
+        await coll.dropIndex('roll_1');
+        console.log('Dropped legacy roll unique index');
+      }
+    } catch (dropErr) {
+      // ignore if index was already gone
+      if (dropErr.codeName && dropErr.codeName === 'IndexNotFound') {
+        // no-op
+      } else {
+        console.error('Error dropping roll index:', dropErr.message || dropErr);
+      }
+    }
+  })
   .catch(err => console.error("MongoDB error:", err.message));
 
 app.use("/api/seats", seatRoutes);

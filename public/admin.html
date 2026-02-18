@@ -184,8 +184,9 @@
             return;
           }
 
-          // If there are duplicates, show a confirmation modal
-          if (preview.duplicateCount && preview.duplicateCount > 0) {
+          // If there are duplicates or conflicts, ask for confirmation before proceeding
+          if ((preview.duplicateCount && preview.duplicateCount > 0) ||
+              (preview.conflictCount && preview.conflictCount > 0)) {
             showConfirmModal(preview, async (confirmed) => {
               if (!confirmed) {
                 msg.innerHTML = '<p class="text-sm text-slate-600">Operation cancelled.</p>';
@@ -193,11 +194,9 @@
                 addBtn.classList.remove('opacity-60');
                 return;
               }
-              // proceed with actual upload
               await performUpload(payload);
             });
           } else {
-            // no duplicates — proceed directly
             await performUpload(payload);
           }
 
@@ -226,8 +225,12 @@
             const htmlParts = [];
             htmlParts.push(`<p class="text-sm text-slate-600">Generated: <strong>${result.generated}</strong></p>`);
             htmlParts.push(`<p class="text-sm text-slate-600">Inserted (new): <strong>${result.inserted}</strong></p>`);
-            htmlParts.push(`<p class="text-sm text-slate-600">Replaced (existing): <strong>${result.replacedAttempted}</strong></p>`);
-            htmlParts.push(`<p class="text-sm text-slate-600">Actually modified: <strong>${result.replacedModified}</strong></p>`);
+            if (result.conflicts !== undefined) {
+              htmlParts.push(`<p class="text-sm text-orange-600">Conflicts (skipped): <strong>${result.conflicts}</strong></p>`);
+            }
+            if (result.modified !== undefined) {
+              htmlParts.push(`<p class="text-sm text-slate-600">Actually modified: <strong>${result.modified}</strong></p>`);
+            }
 
             if (result.insertedRolls && result.insertedRolls.length) {
               htmlParts.push('<details class="mt-2"><summary class="text-xs text-slate-500 cursor-pointer">View inserted rolls</summary>');
@@ -235,9 +238,9 @@
               htmlParts.push('</details>');
             }
 
-            if (result.replacedRolls && result.replacedRolls.length) {
-              htmlParts.push('<details class="mt-2"><summary class="text-xs text-slate-500 cursor-pointer">View replaced rolls</summary>');
-              htmlParts.push(`<div class="text-xs text-slate-700 mt-2 whitespace-pre-wrap">${result.replacedRolls.join(', ')}</div>`);
+            if (result.conflictRolls && result.conflictRolls.length) {
+              htmlParts.push('<details class="mt-2"><summary class="text-xs text-orange-500 cursor-pointer">View conflict rolls</summary>');
+              htmlParts.push(`<div class="text-xs text-slate-700 mt-2 whitespace-pre-wrap">${result.conflictRolls.join(', ')}</div>`);
               htmlParts.push('</details>');
             }
 
@@ -263,12 +266,25 @@
 
         const title = document.createElement('h3');
         title.className = 'text-lg font-bold mb-2';
-        title.innerText = `Found ${preview.duplicateCount} existing roll(s)`;
+        let titleText = `Found ${preview.duplicateCount || 0} existing roll(s)`;
+        if (preview.conflictCount && preview.conflictCount > 0) {
+          titleText += `, ${preview.conflictCount} conflict(s)`;
+        }
+        title.innerText = titleText;
         box.appendChild(title);
 
         const note = document.createElement('p');
         note.className = 'text-sm text-slate-600 mb-4';
-        note.innerText = 'Continuing will replace existing entries with the new data. Choose Continue to proceed or Cancel to abort.';
+        let noteText = '';
+        if (preview.duplicateCount && preview.duplicateCount > 0) {
+          noteText += 'Unchanged rolls already match exactly.';
+        }
+        if (preview.conflictCount && preview.conflictCount > 0) {
+          if (noteText) noteText += ' ';
+          noteText += 'Entries that conflict (same roll but different room/year/location) will be skipped.';
+        }
+        noteText += ' Choose Continue to proceed or Cancel to abort.';
+        note.innerText = noteText;
         box.appendChild(note);
 
         if (preview.duplicateRolls && preview.duplicateRolls.length) {
@@ -276,7 +292,7 @@
           details.className = 'mb-4';
           const summary = document.createElement('summary');
           summary.className = 'text-sm text-slate-500 cursor-pointer';
-          summary.innerText = 'View duplicate rolls';
+          summary.innerText = 'View unchanged rolls';
           details.appendChild(summary);
 
           const list = document.createElement('div');
@@ -284,6 +300,20 @@
           list.innerText = preview.duplicateRolls.join(', ');
           details.appendChild(list);
           box.appendChild(details);
+        }
+        if (preview.conflictRolls && preview.conflictRolls.length) {
+          const details3 = document.createElement('details');
+          details3.className = 'mb-4';
+          const summary3 = document.createElement('summary');
+          summary3.className = 'text-sm text-orange-500 cursor-pointer';
+          summary3.innerText = 'View conflict rolls';
+          details3.appendChild(summary3);
+
+          const list3 = document.createElement('div');
+          list3.className = 'text-xs text-slate-700 mt-2 whitespace-pre-wrap';
+          list3.innerText = preview.conflictRolls.join(', ');
+          details3.appendChild(list3);
+          box.appendChild(details3);
         }
 
         const actions = document.createElement('div');

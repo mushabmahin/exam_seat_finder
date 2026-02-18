@@ -42,30 +42,34 @@ router.post("/add-range", async (req, res) => {
   }
 
   try {
-    // Find existing seats so we can determine which ones are identical vs changed
+    // Find existing seats so we can determine which ones are identical, which conflict, and which are new
     const existing = await Seat.find({ roll: { $in: rolls } }).lean();
-    const existingMap = Object.fromEntries(existing.map(s => [s.roll, s]));
+    // key by roll+branch so that different branches may coexist
+    const existingMap = Object.fromEntries(existing.map(s => [`${s.roll}_${s.branch}`, s]));
 
     // prepare counts for preview
     const duplicateRolls = [];
-    const changedRolls = [];
+    const conflictRolls = []; // same roll+branch exists but other details differ
     const newRolls = [];
 
     records.forEach(rec => {
-      const ex = existingMap[rec.roll];
+      const key = `${rec.roll}_${rec.branch}`;
+      const ex = existingMap[key];
+      const label = `${rec.roll} (${rec.branch})`;
       if (ex) {
+        // all other fields must also match for it to be a duplicate
         if (
-          ex.branch === rec.branch &&
           ex.year === rec.year &&
           ex.room === rec.room &&
           ex.location === rec.location
         ) {
-          duplicateRolls.push(rec.roll);
+          duplicateRolls.push(label);
         } else {
-          changedRolls.push(rec.roll);
+          // even though branch is same, room/year/location differ -> conflict
+          conflictRolls.push(label);
         }
       } else {
-        newRolls.push(rec.roll);
+        newRolls.push(label);
       }
     });
 
@@ -78,60 +82,45 @@ router.post("/add-range", async (req, res) => {
         generated,
         duplicateCount: duplicateRolls.length,
         duplicateRolls,
-        changedCount: changedRolls.length,
-        changedRolls,
+        conflictCount: conflictRolls.length,
+        conflictRolls,
         newCount: newRolls.length,
         newRolls
       });
     }
 
-    // Build bulk operations: only include new records or those where something changed
+    // Build bulk operations: insert new entries only (no overwrites)
     const ops = [];
     records.forEach(rec => {
-      const ex = existingMap[rec.roll];
+      const key = `${rec.roll}_${rec.branch}`;
+      const ex = existingMap[key];
       if (!ex) {
-        // brand‑new entry
         ops.push({
           updateOne: {
-            filter: { roll: rec.roll },
-            update: { $set: { branch: rec.branch, year: rec.year, room: rec.room, location: rec.location } },
+            filter: { roll: rec.roll, branch: rec.branch },
+            update: { $set: { year: rec.year, room: rec.room, location: rec.location } },
             upsert: true
           }
         });
-      } else {
-        // existing; if any field differs then update, otherwise skip
-        if (
-          ex.branch !== rec.branch ||
-          ex.year !== rec.year ||
-          ex.room !== rec.room ||
-          ex.location !== rec.location
-        ) {
-          ops.push({
-            updateOne: {
-              filter: { roll: rec.roll },
-              update: { $set: { branch: rec.branch, year: rec.year, room: rec.room, location: rec.location } },
-              upsert: true
-            }
-          });
-        }
       }
+      // if an existing same-branch record exists we skip (either duplicate or conflict)
     });
 
     const bulkResult = ops.length > 0 ? await Seat.bulkWrite(ops, { ordered: false }) : null;
 
     // Compute counts based on earlier categorization
     const insertedCount = newRolls.length;
-    const replacedAttempted = changedRolls.length;
+    const conflictCount = conflictRolls.length;
     const modifiedCount = (bulkResult && (bulkResult.modifiedCount || bulkResult.nModified || (bulkResult.result && bulkResult.result.nModified))) || 0;
 
     res.json({
       message: `Range processed`,
       generated,
       inserted: insertedCount,
-      replacedAttempted,
-      replacedModified: modifiedCount,
+      conflicts: conflictCount,
+      modified: modifiedCount,
       insertedRolls: newRolls,
-      replacedRolls: changedRolls
+      conflictRolls
     });
   } catch (err) {
     console.error("Error inserting range:", err);
