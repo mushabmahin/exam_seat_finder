@@ -20,8 +20,9 @@ export default function App() {
 
     setLoading(true)
     try {
+
       const res = await fetch(
-        `/api/seats/search?roll=${encodeURIComponent(roll.toUpperCase())}&branch=${encodeURIComponent(branch)}&year=${encodeURIComponent(year)}`
+        `${import.meta.env.VITE_BASE_URL}/api/seats/search?roll=${encodeURIComponent(roll.toUpperCase())}&branch=${encodeURIComponent(branch)}&year=${encodeURIComponent(year)}`
       )
       const data = await res.json()
       if (res.status === 404) {
