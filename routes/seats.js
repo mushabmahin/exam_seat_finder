@@ -199,4 +199,33 @@ router.post('/clear', async (req, res) => {
   }
 });
 
+// Admin utility: clear seats matching a specific room (optionally branch/year)
+router.post('/clear-room', async (req, res) => {
+  try {
+    let { room, branch, year } = req.body;
+    if (!room) {
+      return res.status(400).json({ message: 'room is required' });
+    }
+
+    const filter = { room: String(room).trim() };
+    if (branch) {
+      filter.branch = String(branch).toUpperCase();
+    }
+    if (year !== undefined && year !== null && year !== '') {
+      const yearNum = Number(year);
+      if (Number.isNaN(yearNum)) {
+        return res.status(400).json({ message: 'year must be a number' });
+      }
+      filter.year = yearNum;
+    }
+
+    const result = await Seat.deleteMany(filter);
+    const deleted = result.deletedCount || result.n || 0;
+    res.json({ message: 'Room cleared', deleted, filter });
+  } catch (err) {
+    console.error('Error clearing room:', err);
+    res.status(500).json({ message: 'Failed to clear room', error: err.message });
+  }
+});
+
 module.exports = router;

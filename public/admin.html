@@ -79,6 +79,7 @@
         <div class="mt-6 flex gap-3">
           <button id="addBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition">Add Seats</button>
           <button id="clearBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3 px-6 rounded-lg transition">Clear Form</button>
+          <button id="clearRoomBtn" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition">Clear Room</button>
           <button id="clearDbBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition">Clear Database</button>
         </div>
 
@@ -361,6 +362,55 @@
             fetchStatus();
           } catch (err) {
             console.error('Clear DB failed', err);
+            msg.innerHTML = '<p class="text-sm text-red-600">Network or server error during clear</p>';
+          } finally {
+            btn.disabled = false;
+            btn.classList.remove('opacity-60');
+          }
+        });
+      }
+
+      // Clear room handler – deletes seats for specified room (optionally branch/year)
+      if (document.getElementById('clearRoomBtn')) {
+        document.getElementById('clearRoomBtn').addEventListener('click', async () => {
+          const r = room.value.trim();
+          const b = branch.value.trim();
+          const y = year.value;
+
+          if (!r) {
+            alert('Please enter a room number to clear');
+            return;
+          }
+
+          let promptMsg = `Type CLEAR to delete seats for room ${r}`;
+          if (b) promptMsg += ` (branch ${b.toUpperCase()})`;
+          if (y) promptMsg += ` year ${y}`;
+          const confirmText = prompt(promptMsg);
+          if (confirmText !== 'CLEAR') return;
+
+          const btn = document.getElementById('clearRoomBtn');
+          btn.disabled = true;
+          btn.classList.add('opacity-60');
+          msg.innerHTML = '';
+
+          try {
+            const payload = { room: r };
+            if (b) payload.branch = b;
+            if (y) payload.year = Number(y);
+
+            const res = await fetch('/api/seats/clear-room', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            const result = await res.json();
+            if (!res.ok) {
+              msg.innerHTML = `<p class="text-sm text-red-600">${result.message || result.error || 'Clear room failed'}</p>`;
+            } else {
+              msg.innerHTML = `<p class="text-sm text-emerald-600">${result.message}. Deleted: <strong>${result.deleted}</strong></p>`;
+            }
+          } catch (err) {
+            console.error('Clear room failed', err);
             msg.innerHTML = '<p class="text-sm text-red-600">Network or server error during clear</p>';
           } finally {
             btn.disabled = false;
